@@ -1,4 +1,5 @@
-﻿using HKEXReader.ExternalClient;
+﻿using System.Diagnostics;
+using HKEXReader.ExternalClient;
 using Spectre.Console;
 
 namespace HKEXReader;
@@ -7,7 +8,6 @@ public static class Program
 {
     public static async Task Main(string[] args)
     {
-
         // ToDo: For Development
         var stockCode = "00005";
 
@@ -44,6 +44,8 @@ public static class Program
         AnsiConsole.Write(table);
 
         AnsiConsole.WriteLine($"Row Count: {result.Count}");
+
+        
     }
 }
 

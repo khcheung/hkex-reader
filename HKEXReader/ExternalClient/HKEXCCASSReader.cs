@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Text.RegularExpressions;
 using HKEXReader.Extensions;
@@ -31,10 +32,35 @@ public class HKEXCCASSReader : IDisposable
         httpClient.BaseAddress = new Uri("https://www3.hkexnews.hk/");
         httpClient.DefaultRequestHeaders.Add("Origin", "https://www3.hkexnews.hk");
         httpClient.DefaultRequestHeaders.Add("Referer", "https://www3.hkexnews.hk/sdw/search/searchsdw.aspx");
-        httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Linux)");
+        httpClient.DefaultRequestHeaders.Add("user-agent", "Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36");
+        httpClient.DefaultRequestHeaders.Add("accept-encoding", "gzip, deflate");
+        httpClient.DefaultRequestHeaders.Add("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7");
+        httpClient.DefaultRequestHeaders.Add("accept-language", "en,ja;q=0.9,en-US;q=0.8,zh-TW;q=0.7,zh-CN;q=0.6,zh;q=0.5");
+        httpClient.DefaultRequestHeaders.Add("cache-control", "no-cache");
+        httpClient.DefaultRequestHeaders.Add("sec-ch-ua", """Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24""");
+        httpClient.DefaultRequestHeaders.Add("sec-ch-ua-mobile", "?0");
+        httpClient.DefaultRequestHeaders.Add("sec-ch-ua-platform", "Chrome OS");
+        httpClient.DefaultRequestHeaders.Add("sec-fetch-dest", "document");
+        httpClient.DefaultRequestHeaders.Add("sec-fetch-mode", "navigate");
+        httpClient.DefaultRequestHeaders.Add("sec-fetch-site", "none");
+        httpClient.DefaultRequestHeaders.Add("sec-fetch-user", "?1");
+        httpClient.DefaultRequestHeaders.Add("upgrade-insecure-requests", "1");
+        httpClient.DefaultRequestHeaders.Add("pragma", "no-cache");
+        httpClient.DefaultRequestHeaders.Add("priority", "u=0, i");
+
+        cookieContainer.Add(new Uri("https://www3.hkexnews.hk"), new Cookie("bm_ss", "", "/"));
+        cookieContainer.Add(new Uri("https://www3.hkexnews.hk"), new Cookie("OptanonConsent", "", "/"));
+        cookieContainer.Add(new Uri("https://www3.hkexnews.hk"), new Cookie("bm_so", "", "/"));
+        cookieContainer.Add(new Uri("https://www3.hkexnews.hk"), new Cookie("bm_lso", "", "/"));
+        cookieContainer.Add(new Uri("https://www3.hkexnews.hk"), new Cookie("bm_s", "", "/"));
+        
     }
+
     public async Task<List<ShareholdingItem>> GetSearchSDWAsync(String stockCode, DateTime? shareholdingDate = null)
     {
+        Stopwatch sw = new();
+        sw.Start();
+
         List<ShareholdingItem> result = [];
         if (shareholdingDate == null)
         {
@@ -42,8 +68,12 @@ public class HKEXCCASSReader : IDisposable
         }
 
         Console.WriteLine("Load Page (SearchSDW)");
+
         // Get Page
         var searchPage = await GetPageAsync("/sdw/search/searchsdw.aspx");
+        Console.WriteLine("Loaded Page");
+        Console.WriteLine($"Elapsed: {sw.Elapsed.ToString()}");
+
 
         ASPNetPage aspNetPage = searchPage;
         var maxDate = aspNetPage.GetMaxDate() ?? DateTime.Today;
@@ -72,7 +102,7 @@ public class HKEXCCASSReader : IDisposable
             { "__EVENTTARGET", "btnSearch" },
             { "__EVENTARGUMENT", "" },
             { "__VIEWSTATE", viewState },
-            //{ "__EVENTVALIDATION", eventValidation },
+            { "__EVENTVALIDATION", eventValidation },
             { "__VIEWSTATEGENERATOR", viewStateGenerator },
             { "today", "20260628" },
             { "sortBy", "shareholding" },
@@ -87,18 +117,15 @@ public class HKEXCCASSReader : IDisposable
             { "txtSelPartID", "" },
         };
 
+
         var content = new FormUrlEncodedContent(formData);
 
         Console.WriteLine($"Submit Search {stockCode}");
         // Post Form Data
-        var resultPage = "";
-        using (var response = await httpClient.PostAsync("/sdw/search/searchsdw.aspx", content))
-        {
-            response.EnsureSuccessStatusCode();
-            var responseBody = await response.Content.ReadAsStringAsync();
-            //Console.WriteLine(responseBody);
-            resultPage = responseBody;
-        }
+        var resultPage = await PostPageAsync("/sdw/search/searchsdw.aspx", content);
+
+        Console.WriteLine("Submit Response");
+        Console.WriteLine($"Elapsed: {sw.Elapsed.ToString()}");
 
         Console.WriteLine("Process Response");
         // Process Response
@@ -140,6 +167,8 @@ public class HKEXCCASSReader : IDisposable
                 }
             }
         }
+        Console.WriteLine("Finish Process");
+        Console.WriteLine($"Elapsed: {sw.Elapsed.ToString()}");
         return result;
     }
 
@@ -151,7 +180,15 @@ public class HKEXCCASSReader : IDisposable
             string responseBody = await response.Content.ReadAsStringAsync();
             return responseBody;
         }
-
+    }
+        private async Task<String> PostPageAsync(String url, HttpContent content)
+    {
+        using (var response = await httpClient.PostAsync(url, content))
+        {
+            response.EnsureSuccessStatusCode();
+            string responseBody = await response.Content.ReadAsStringAsync();
+            return responseBody;
+        }
     }
 
     protected virtual void Dispose(bool disposing)
@@ -177,15 +214,4 @@ public class HKEXCCASSReader : IDisposable
         Dispose(disposing: true);
         GC.SuppressFinalize(this);
     }
-}
-
-
-
-public class ShareholdingItem
-{
-    public String ID { get; set; } = String.Empty;
-    public String Name { get; set; } = String.Empty;
-    public String Address { get; set; } = String.Empty;
-    public String Shareholding { get; set; } = String.Empty;
-    public String Percentage { get; set; } = String.Empty;
 }
