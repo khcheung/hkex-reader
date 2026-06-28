@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using System.Net;
+using System.Text;
 using System.Text.RegularExpressions;
 using HKEXReader.Extensions;
+using Microsoft.ClearScript.V8;
 
 namespace HKEXReader.ExternalClient;
 
@@ -23,6 +25,9 @@ public class HKEXCCASSReader : IDisposable
 
         httpMessageHandler = new HttpClientHandler
         {
+            UseProxy = false,
+            Proxy = new WebProxy("127.0.0.1", 8888),
+            ServerCertificateCustomValidationCallback = (m, c, cc, p) => true,
             CookieContainer = cookieContainer,
             UseCookies = true,
             AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
@@ -33,13 +38,14 @@ public class HKEXCCASSReader : IDisposable
         httpClient.DefaultRequestHeaders.Add("Origin", "https://www3.hkexnews.hk");
         httpClient.DefaultRequestHeaders.Add("Referer", "https://www3.hkexnews.hk/sdw/search/searchsdw.aspx");
         httpClient.DefaultRequestHeaders.Add("user-agent", "Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36");
-        httpClient.DefaultRequestHeaders.Add("accept-encoding", "gzip, deflate");
+        httpClient.DefaultRequestHeaders.Add("accept-encoding", "gzip, deflate, br, zstd");
         httpClient.DefaultRequestHeaders.Add("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7");
         httpClient.DefaultRequestHeaders.Add("accept-language", "en,ja;q=0.9,en-US;q=0.8,zh-TW;q=0.7,zh-CN;q=0.6,zh;q=0.5");
         httpClient.DefaultRequestHeaders.Add("cache-control", "no-cache");
         httpClient.DefaultRequestHeaders.Add("sec-ch-ua", """Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24""");
+        //httpClient.DefaultRequestHeaders.Add("sec-ch-ua", "\"Looker Browser\"");
         httpClient.DefaultRequestHeaders.Add("sec-ch-ua-mobile", "?0");
-        httpClient.DefaultRequestHeaders.Add("sec-ch-ua-platform", "Chrome OS");
+        httpClient.DefaultRequestHeaders.Add("sec-ch-ua-platform", "\"Chrome OS\"");
         httpClient.DefaultRequestHeaders.Add("sec-fetch-dest", "document");
         httpClient.DefaultRequestHeaders.Add("sec-fetch-mode", "navigate");
         httpClient.DefaultRequestHeaders.Add("sec-fetch-site", "none");
@@ -47,13 +53,28 @@ public class HKEXCCASSReader : IDisposable
         httpClient.DefaultRequestHeaders.Add("upgrade-insecure-requests", "1");
         httpClient.DefaultRequestHeaders.Add("pragma", "no-cache");
         httpClient.DefaultRequestHeaders.Add("priority", "u=0, i");
+        httpClient.DefaultRequestHeaders.Add("connection", "keep-alive");
 
-        cookieContainer.Add(new Uri("https://www3.hkexnews.hk"), new Cookie("bm_ss", "", "/"));
-        cookieContainer.Add(new Uri("https://www3.hkexnews.hk"), new Cookie("OptanonConsent", "", "/"));
-        cookieContainer.Add(new Uri("https://www3.hkexnews.hk"), new Cookie("bm_so", "", "/"));
-        cookieContainer.Add(new Uri("https://www3.hkexnews.hk"), new Cookie("bm_lso", "", "/"));
-        cookieContainer.Add(new Uri("https://www3.hkexnews.hk"), new Cookie("bm_s", "", "/"));
-        
+
+        //cookieContainer.Add(new Cookie("bm_ss", "ab8e18ef4e", "/", ".hkexnews.hk"));
+        cookieContainer.Add(new Cookie("OptanonConsent", "AwaitingReconsent=false&isGpcEnabled=0&datestamp=Sun+Jun+29+2026+02%3A20%3A58+GMT%2B0800+(Hong+Kong+Standard+Time)&version=202303.2.0&browserGpcFlag=0&isIABGlobal=false&hosts=&landingPath=https%3A%2F%2Fwww3.hkexnews.hk%2Fsdw%2Fsearch%2Fsearchsdw.aspx&groups=C0001%3A1%2CC0003%3A0%2CC0004%3A0%2CC0002%3A0", "/", ".hkexnews.hk"));
+        // cookieContainer.Add(new Uri("https://www3.hkexnews.hk"), new Cookie("bm_so", "", "/"));
+        // cookieContainer.Add(new Uri("https://www3.hkexnews.hk"), new Cookie("bm_lso", "", "/"));
+        // cookieContainer.Add(new Uri("https://www3.hkexnews.hk"), new Cookie("bm_s", "", "/"));
+
+    }
+
+    public async Task ProcessScriptAsync()
+    {
+
+        // var js = await GetPageAsync("");
+
+        // V8ScriptEngine engine = new();
+        // engine.AddHostObject("document", new {});
+        // engine.AddHostObject("navigator", new {});
+        // engine.AddHostObject("window", new {});
+        // engine.Execute(js);
+
     }
 
     public async Task<List<ShareholdingItem>> GetSearchSDWAsync(String stockCode, DateTime? shareholdingDate = null)
@@ -174,6 +195,7 @@ public class HKEXCCASSReader : IDisposable
 
     private async Task<String> GetPageAsync(String url)
     {
+        //Console.WriteLine($"Cookie Count {cookieContainer.Count}");
         using (var response = await httpClient.GetAsync(url))
         {
             response.EnsureSuccessStatusCode();
@@ -181,8 +203,17 @@ public class HKEXCCASSReader : IDisposable
             return responseBody;
         }
     }
-        private async Task<String> PostPageAsync(String url, HttpContent content)
+    private async Task<String> PostPageAsync(String url, HttpContent content)
     {
+        //Console.WriteLine($"Cookie Count {cookieContainer.Count}");
+
+        var cookie = cookieContainer.GetCookies(new Uri("https://www3.hkexnews.hk"));
+        var soCookie = cookie.Where(c => c.Name == "bm_so").FirstOrDefault();
+        if (soCookie != null)
+        {
+            var lsoValue = $"{soCookie.Value}~{DateTimeOffset.Now.ToUnixTimeMilliseconds()}";
+            cookieContainer.Add(new Cookie("bm_lso", lsoValue, "/", ".hkexnews.hk"));
+        }
         using (var response = await httpClient.PostAsync(url, content))
         {
             response.EnsureSuccessStatusCode();

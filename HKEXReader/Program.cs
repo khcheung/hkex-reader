@@ -24,7 +24,11 @@ public static class Program
         }
 
         HKEXCCASSReader reader = new HKEXCCASSReader();
+        //await reader.ProcessScriptAsync();
+
         var result = await reader.GetSearchSDWAsync(stockCode);
+
+        var result2 = await reader.GetSearchSDWAsync(stockCode);
 
         var table = new Table();
 
