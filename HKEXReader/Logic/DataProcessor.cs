@@ -18,14 +18,13 @@ public class DataProcessor(String outputPath)
         var snapshotFileName = Path.Combine(targetFolder, $"snapshot_{data.RecordDate:yyyyMMdd}.csv");
         var snapshotMDFileName = Path.Combine(targetFolder, $"snapshot_{data.RecordDate:yyyyMMdd}.md");
 
-        var holdingData = data.ShareholdingList.Select(item => new
+        var holdingData = data.ShareholdingList.Select(item => new HoldingDataItem()
         {
-            item.ID,
-            item.Name,
-            item.Address,
-            item.Shareholding,
+            ID = item.ID,
+            Name = item.Name,
             ShareholdingDecimal = Decimal.TryParse(item.Shareholding, out var shareholdingValue) ? shareholdingValue : 0m,
-            item.Percentage
+            Percentage = item.Percentage,
+            CumulativePercentage = "" // Placeholder for cumulative percentage calculation
         }).ToList();
 
         var summaryData = data.shareholdingSummaryList.Select(item => new
@@ -41,20 +40,31 @@ public class DataProcessor(String outputPath)
         var totalHolding = Decimal.TryParse(data.TotalShareholding, out var totalHoldingValue) ? totalHoldingValue : 0m;
 
 
+        var cumulativeShareholding = 0m;
+        holdingData.OrderByDescending(r => r.ShareholdingDecimal).ToList().ForEach(r =>
+        {
+            cumulativeShareholding += r.ShareholdingDecimal;
+            r.CumulativePercentage = $"{(totalHolding > 0 ? (cumulativeShareholding / totalHolding) * 100 : 0).ToString("0.00")}%";
+        });
+
         using (var writer = new StreamWriter(snapshotFileName))
         {
-            // Write Header
-            await writer.WriteLineAsync("ID,Name,Shareholding,Percentage,CumulativePercentage");
-
-            var cumulativeShareholding = 0m;
-
-            foreach (var item in holdingData)
+            using (var csvWriter = new CsvHelper.CsvWriter(writer, System.Globalization.CultureInfo.InvariantCulture))
             {
-                cumulativeShareholding += item.ShareholdingDecimal;
-                var cumulativePercentage = totalHolding > 0 ? (cumulativeShareholding / totalHolding) * 100 : 0;
-                var line = $"{item.ID},{item.Name},{item.ShareholdingDecimal},{item.Percentage},{cumulativePercentage:0.00}%";
-                await writer.WriteLineAsync(line);
+                await csvWriter.WriteRecordsAsync(holdingData);
             }
+            // // Write Header
+            // await writer.WriteLineAsync("ID,Name,Shareholding,Percentage,CumulativePercentage");
+
+            // var cumulativeShareholding = 0m;
+
+            // foreach (var item in holdingData)
+            // {
+            //     cumulativeShareholding += item.ShareholdingDecimal;
+            //     var cumulativePercentage = totalHolding > 0 ? (cumulativeShareholding / totalHolding) * 100 : 0;
+            //     var line = $"{item.ID},{item.Name},{item.ShareholdingDecimal},{item.Percentage},{cumulativePercentage:0.00}%";
+            //     await writer.WriteLineAsync(line);
+            // }
             writer.Close();
         }
 
@@ -85,13 +95,11 @@ public class DataProcessor(String outputPath)
             await writer.WriteLineAsync("|ID|Name|Shareholding|Percentage|CumulativePercentage");
             await writer.WriteLineAsync("|---|---|---|---|---|");
 
-            var cumulativeShareholding = 0m;
+            //var cumulativeShareholding = 0m;
 
             foreach (var item in holdingData)
             {
-                cumulativeShareholding += item.ShareholdingDecimal;
-                var cumulativePercentage = totalHolding > 0 ? (cumulativeShareholding / totalHolding) * 100 : 0;
-                var line = $"|{item.ID}|{item.Name}|{item.ShareholdingDecimal}|{item.Percentage}|{cumulativePercentage:0.00}%|";
+                var line = $"|{item.ID}|{item.Name}|{item.ShareholdingDecimal}|{item.Percentage}|{item.CumulativePercentage}|";
                 await writer.WriteLineAsync(line);
             }
             writer.Close();
