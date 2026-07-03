@@ -29,11 +29,30 @@ public static class Program
             }
         }
 
+        List<String> stockCodeList = [];
+
         // ToDo: Multiple Stock Code Support
-        if (!Int32.TryParse(stockCode, out var _))
+        if (stockCode.Contains(","))
         {
-            Console.WriteLine("Stock Code Error");
-            return;
+            var stockCodes = stockCode.Split(",");
+            foreach (var code in stockCodes)
+            {
+                if (!Int32.TryParse(code, out var _))
+                {
+                    Console.WriteLine("Stock Code Error");
+                    return;
+                }
+                stockCodeList.Add(code);
+            }
+        }
+        else
+        {
+            if (!Int32.TryParse(stockCode, out var _))
+            {
+                Console.WriteLine("Stock Code Error");
+                return;
+            }
+            stockCodeList.Add(stockCode);
         }
 
         if (outputPath == null)
@@ -46,10 +65,18 @@ public static class Program
 
         HKEXCCASSReader reader = new HKEXCCASSReader();
 
-        var stockResult = await reader.GetSearchSDWAsync(stockCode);
+        foreach (var stockCodeItem in stockCodeList)
+        {
+            Console.WriteLine($"Processing Stock Code: {stockCodeItem}");
 
-        DataProcessor processor = new DataProcessor(outputPath);
-        await processor.ProcessDataAsync(stockCode, stockResult);
+            var stockResult = await reader.GetSearchSDWAsync(stockCodeItem);
+
+            DataProcessor processor = new DataProcessor(outputPath);
+            await processor.ProcessDataAsync(stockCodeItem, stockResult);
+
+        }
+
+
 
         // var table = new Table();
         // // Add columns
