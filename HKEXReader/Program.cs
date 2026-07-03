@@ -12,6 +12,8 @@ public static class Program
         var stockCode = "00005";
 
         String outputPath = null!;
+        String targetDate = null!;
+        DateTime targetDateTime = DateTime.Now;
 
         // Just Simple For Testing
         if (args.Length > 0)
@@ -26,6 +28,16 @@ public static class Program
                     return;
                 }
                 Environment.CurrentDirectory = outputPath;
+            }
+
+            if (args.Length > 2)
+            {
+                targetDate = args[2];
+                if (!DateTime.TryParseExact(targetDate, "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.AssumeLocal, out targetDateTime))
+                {
+                    Console.WriteLine("Target Date Error");
+                    return;
+                }
             }
         }
 
@@ -65,14 +77,18 @@ public static class Program
 
         HKEXCCASSReader reader = new HKEXCCASSReader();
 
+        Random random = new Random();
+
         foreach (var stockCodeItem in stockCodeList)
         {
             Console.WriteLine($"Processing Stock Code: {stockCodeItem}");
 
-            var stockResult = await reader.GetSearchSDWAsync(stockCodeItem);
+            var stockResult = await reader.GetSearchSDWAsync(stockCodeItem, targetDate != null ? targetDateTime : (DateTime?)null);
 
             DataProcessor processor = new DataProcessor(outputPath);
             await processor.ProcessDataAsync(stockCodeItem, stockResult);
+
+            await Task.Delay(random.Next(2_000, 5_000));
 
         }
 

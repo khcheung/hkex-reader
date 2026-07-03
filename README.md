@@ -5,13 +5,13 @@ HKEX Reader
 
 Working Dir: /HKEXReader/
 
-dotnet run [STOCKCODE] [OUTPUT FOLDER]
+dotnet run [STOCKCODE] [OUTPUT FOLDER] [TARGET DATE]
 
 ```sh
 
-dotnet run #####,##### ../output
+dotnet run #####,##### ../output yyyy-MM-dd
 
-dotnet run 00001,00002,00003,00005,00008,00017 ../output
+dotnet run 00001,00002,00003,00005,00008,00017 ../output 2026-06-30
 
 ```
 

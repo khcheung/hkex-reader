@@ -176,7 +176,7 @@ public class DataProcessor(String outputPath)
             await writer.WriteLineAsync($"# Concentration Analysis for {stockCode}");
 
 
-            await writer.WriteLineAsync("|Date|Top 1%|Top 5%|Top 10%|Top 10% NCIP|Stake in CCASS|");
+            await writer.WriteLineAsync("|Date|Top 1|Top 5|Top 10|Top 10 + NCIP|Stake in CCASS|");
             await writer.WriteLineAsync("|---|---|---|---|---|---|");
 
             foreach (var item in orderedRecords)
