@@ -24,13 +24,13 @@ public class HKEXCCASSReader : IDisposable
 
         httpMessageHandler = new HttpClientHandler
         {
-            //UseProxy = false,
+            //UseProxy = true,
             //Proxy = new WebProxy("127.0.0.1", 8888),
             //ServerCertificateCustomValidationCallback = (m, c, cc, p) => true,
             CookieContainer = cookieContainer,
             UseCookies = true,
             AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
-            SslProtocols = System.Security.Authentication.SslProtocols.Tls12,
+            SslProtocols = System.Security.Authentication.SslProtocols.Tls13,
             ClientCertificateOptions = ClientCertificateOption.Manual
         };
 
@@ -57,21 +57,27 @@ public class HKEXCCASSReader : IDisposable
         //httpClient.DefaultRequestHeaders.Add("pragma", "no-cache");
         //httpClient.DefaultRequestHeaders.Add("priority", "u=0, i");
 
-
         cookieContainer.Add(new System.Net.Cookie("OptanonConsent", "isGpcEnabled=0&datestamp=Sun+Jun+29+2026+02%3A20%3A58+GMT%2B0800+(Hong+Kong+Standard+Time)&version=202303.2.0&browserGpcFlag=0&isIABGlobal=false&hosts=&landingPath=https%3A%2F%2Fwww3.hkexnews.hk%2Fsdw%2Fsearch%2Fsearchsdw.aspx&groups=C0001%3A1%2CC0003%3A0%2CC0004%3A0%2CC0002%3A0&AwaitingReconsent=false", "/", ".hkexnews.hk"));
         cookieContainer.Add(new System.Net.Cookie("s_cc", "true", "/", ".hkexnews.hk"));
         cookieContainer.Add(new System.Net.Cookie("sclang", "zh-HK", "/", ".hkexnews.hk"));
-
-
-
     }
 
-    public async Task<List<ShareholdingItem>> GetSearchSDWAsync(String stockCode, DateTime? shareholdingDate = null)
-    {
-        Stopwatch sw = new();
-        sw.Start();
+    private ASPNetPage lastPage = null!;
 
-        List<ShareholdingItem> result = [];
+    private async Task<ASPNetPage> LoadPageAsync()
+    {
+        // Get Page
+        var searchPage = await GetPageAsync("/sdw/search/searchsdw.aspx");
+
+        ASPNetPage aspNetPage = searchPage;
+
+        return aspNetPage;
+    }
+
+    public async Task<SearchSDWResultDto> GetSearchSDWAsync(String stockCode, DateTime? shareholdingDate = null)
+    {
+        SearchSDWResultDto result = new();
+
         if (shareholdingDate == null)
         {
             shareholdingDate = DateTime.Today;
@@ -80,15 +86,12 @@ public class HKEXCCASSReader : IDisposable
         Console.WriteLine("Load Page (SearchSDW)");
 
         // Get Page
-        var searchPage = await GetPageAsync("/sdw/search/searchsdw.aspx");
-        Console.WriteLine("Loaded Page");
-        Console.WriteLine($"Elapsed: {sw.Elapsed.ToString()}");
+        if (lastPage == null)
+        {
+            lastPage = await LoadPageAsync();
+        }
+        var aspNetPage = lastPage;
 
-        Random random = new Random();
-        await Task.Delay(random.Next(2_000, 4_000));
-
-
-        ASPNetPage aspNetPage = searchPage;
         var maxDate = aspNetPage.GetMaxDate() ?? DateTime.Today;
         var minDate = aspNetPage.GetMinDate() ?? DateTime.Today.AddDays(-365);
 
@@ -101,6 +104,8 @@ public class HKEXCCASSReader : IDisposable
         {
             shareholdingDate = minDate;
         }
+
+        result.RecordDate = shareholdingDate.Value;
 
         // Get ViewState
         var viewState = aspNetPage.ViewState;
@@ -133,15 +138,67 @@ public class HKEXCCASSReader : IDisposable
 
         var content = new FormUrlEncodedContent(formData);
 
-        Console.WriteLine($"Submit Search {stockCode}");
         // Post Form Data
         var resultPage = await PostPageAsync("/sdw/search/searchsdw.aspx", content);
 
-        Console.WriteLine("Submit Response");
-        Console.WriteLine($"Elapsed: {sw.Elapsed.ToString()}");
+        ASPNetPage rPage = resultPage;
+        this.lastPage = rPage;
 
-        Console.WriteLine("Process Response");
+
         // Process Response
+
+        Regex rxSummaryTable = new Regex(@"<div class=""ccass-search-summary-table(.*?)<hr />", RegexOptions.Singleline);
+        var mSummaryTable = rxSummaryTable.Match(resultPage);
+        if (mSummaryTable.Success)
+        {
+
+            // <div class="ccass-search-datarow">
+            // <div class="summary-category">Market Intermediaries</div>
+            // <div class="shareholding">
+            // <div class="header">Shareholding in CCASS </div>
+            // <div class="value">1,546,313,565</div>
+            // </div>
+            // <div class="number-of-participants">
+            // <div class="header">Number of Participants</div>
+            // <div class="value">170</div>
+            // </div>
+            // <div class="percent-of-participants">
+            // <div class="header">% of the total number of Issued Shares/ Warrants/ Units</div>
+            // <div class="value">83.70%</div>
+            // </div>
+            // </div>
+            Regex rxRow = new Regex(@"<div class=""ccass-search-datarow"">(?:.*?)<div class=""summary-category"">([^>]*)</div>(?:.*?)<div class=""value"">([^>]*)</div>(?:.*?)<div class=""value"">([^>]*)</div>(?:.*?)<div class=""value"">([^>]*)</div>", RegexOptions.Singleline);
+
+            var mRowCollection = rxRow.Matches(mSummaryTable.Groups[0].Value);
+            foreach (var mRow in mRowCollection.OfType<Match>())
+            {
+                var category = mRow.Groups[1].Value;
+                var holding = mRow.Groups[2].Value;
+                var participants = mRow.Groups[3].Value;
+                var percentage = mRow.Groups[4].Value;
+
+                result.shareholdingSummaryList.Add(new ShareholdingSummaryItemDto()
+                {
+                    Category = category,
+                    Shareholding = holding,
+                    Participants = participants,
+                    Percentage = percentage
+                });
+
+            }
+
+            //<div class="summary-value">1,847,269,704</div>
+            Regex rxSummaryValue = new Regex(@"<div class=""summary-value"">([^<]*)</div>");
+            var mSummaryValue = rxSummaryValue.Match(mSummaryTable.Groups[1].Value);
+            if (mSummaryValue.Success)
+            {
+                var totalShareholding = mSummaryValue.Groups[1].Value;
+                result.TotalShareholding = totalShareholding;
+            }
+
+        }
+
+
         Regex rxTable = new Regex(@"<table class=""table(?:[^>]*)>(.*?)</table>", RegexOptions.Singleline);
         var mTable = rxTable.Match(resultPage);
         if (mTable.Success)
@@ -163,7 +220,7 @@ public class HKEXCCASSReader : IDisposable
                     var mData = rxData.Matches(row);
                     if (mData.Count == 5)
                     {
-                        result.Add(new ShareholdingItem()
+                        result.ShareholdingList.Add(new ShareholdingItem()
                         {
                             ID = mData[0].Groups[1].Value,
                             Name = mData[1].Groups[1].Value,
@@ -180,8 +237,7 @@ public class HKEXCCASSReader : IDisposable
                 }
             }
         }
-        Console.WriteLine("Finish Process");
-        Console.WriteLine($"Elapsed: {sw.Elapsed.ToString()}");
+
         return result;
     }
 

@@ -11,6 +11,7 @@
     <PackageReference Include="Microsoft.ClearScript.V8" Version="7.5.1" />
     <PackageReference Include="Microsoft.ClearScript.V8.Native.linux-x64" Version="7.5.1" />    
     <PackageReference Include="Spectre.Console" Version="0.57.1" />
+    <PackageReference Include="CsvHelper" Version="33.1.0" />
   </ItemGroup>
 
 </Project>
