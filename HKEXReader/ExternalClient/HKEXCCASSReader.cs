@@ -74,6 +74,47 @@ public class HKEXCCASSReader : IDisposable
         return aspNetPage;
     }
 
+    public async Task<StockListResultDto> GetStockListAsync(DateTime? shareholdingDate = null)
+    {
+        StockListResultDto result = new();
+
+        if (shareholdingDate == null)
+        {
+            shareholdingDate = DateTime.Today;
+        }
+
+        if (lastPage == null)
+        {
+            lastPage = await LoadPageAsync();
+        }
+        var aspNetPage = lastPage;
+        var maxDate = aspNetPage.GetMaxDate() ?? DateTime.Today;
+        var minDate = aspNetPage.GetMinDate() ?? DateTime.Today.AddDays(-365);
+
+        if (shareholdingDate > maxDate)
+        {
+            shareholdingDate = maxDate;
+        }
+
+        if (shareholdingDate < minDate)
+        {
+            shareholdingDate = minDate;
+        }
+
+        var stockListPage = await GetPageAsync($"/sdw/search/ccass_stock_list.htm?sortby=stockcode&shareholdingdate={shareholdingDate:yyyyMMdd}");
+
+        var stockApiUrl = $"/sdw/search/stocklist.aspx?sortby=stockname&shareholdingdate={shareholdingDate:yyyyMMdd}";
+        var stockResult = await GetPageAsync(stockApiUrl);
+        var stockList = System.Text.Json.JsonSerializer.Deserialize<List<StockListItemDto>>(stockResult)!;
+
+        stockList = stockList.OrderBy(s => s.StockCode).ToList();
+        result.StockList = stockList;
+        result.RecordDate = shareholdingDate.Value; 
+        return result;
+
+
+    }
+
     public async Task<SearchSDWResultDto> GetSearchSDWAsync(String stockCode, DateTime? shareholdingDate = null)
     {
         SearchSDWResultDto result = new();

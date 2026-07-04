@@ -92,7 +92,7 @@ public class DataProcessor(String outputPath)
 
             await writer.WriteLineAsync("## Detail");
 
-            await writer.WriteLineAsync("|ID|Name|Shareholding|Percentage|CumulativePercentage");
+            await writer.WriteLineAsync("|ID|Name|Shareholding|Percentage|CumulativePercentage|");
             await writer.WriteLineAsync("|---|---|---|---|---|");
 
             //var cumulativeShareholding = 0m;
@@ -186,5 +186,43 @@ public class DataProcessor(String outputPath)
             }
             writer.Close();
         }
+    }
+
+    public async Task SaveStockListAsync(List<StockListItemDto> stockList, DateTime? recordDate = null)
+    {
+        var targetFolder = Path.Combine(outputPath);
+        if (!Directory.Exists(targetFolder))
+        {
+            Directory.CreateDirectory(targetFolder);
+        }
+
+        // Create StockList
+        var stockListFileName = Path.Combine(targetFolder, $"stockList.csv");
+        var stockListMDFileName = Path.Combine(targetFolder, $"stockList.md");
+
+        using (var writer = new StreamWriter(stockListFileName))
+        {
+            using (var csvWriter = new CsvHelper.CsvWriter(writer, System.Globalization.CultureInfo.InvariantCulture))
+            {
+                await csvWriter.WriteRecordsAsync(stockList);
+            }
+            writer.Close();
+        }
+
+         using (var writer = new StreamWriter(stockListMDFileName))
+        {
+            await writer.WriteLineAsync($"# StockList as at {recordDate:yyyy-MM-dd}");
+
+            await writer.WriteLineAsync("|Stock Code|Stock Name|");
+            await writer.WriteLineAsync("|---|---|");
+           
+            foreach (var item in stockList)
+            {
+                await writer.WriteLineAsync($"|{item.StockCode}|{item.StockName}|");
+            }
+
+            writer.Close();
+        }
+
     }
 }

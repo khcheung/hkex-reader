@@ -41,10 +41,27 @@ public static class Program
             }
         }
 
+        if (outputPath == null)
+        {
+            outputPath = Environment.CurrentDirectory;
+            outputPath = Path.Combine(outputPath, "data");
+        }
+
+        Console.WriteLine($"File Output Path: {outputPath}");
+
+        HKEXCCASSReader reader = new HKEXCCASSReader();
+        DataProcessor processor = new DataProcessor(outputPath);
+
         List<String> stockCodeList = [];
 
-        // ToDo: Multiple Stock Code Support
-        if (stockCode.Contains(","))
+        if (stockCode == "STOCKCODE")
+        {
+            var stockListResult = await reader.GetStockListAsync();
+            await processor.SaveStockListAsync(stockListResult.StockList, stockListResult.RecordDate);
+            return;
+
+        }
+        else if (stockCode.Contains(","))
         {
             var stockCodes = stockCode.Split(",");
             foreach (var code in stockCodes)
@@ -67,15 +84,9 @@ public static class Program
             stockCodeList.Add(stockCode);
         }
 
-        if (outputPath == null)
-        {
-            outputPath = Environment.CurrentDirectory;
-            outputPath = Path.Combine(outputPath, "data");
-        }
 
-        Console.WriteLine($"File Output Path: {outputPath}");
 
-        HKEXCCASSReader reader = new HKEXCCASSReader();
+        //HKEXCCASSReader reader = new HKEXCCASSReader();
 
         Random random = new Random();
 
@@ -85,7 +96,6 @@ public static class Program
 
             var stockResult = await reader.GetSearchSDWAsync(stockCodeItem, targetDate != null ? targetDateTime : (DateTime?)null);
 
-            DataProcessor processor = new DataProcessor(outputPath);
             await processor.ProcessDataAsync(stockCodeItem, stockResult);
 
             await Task.Delay(random.Next(2_000, 5_000));
