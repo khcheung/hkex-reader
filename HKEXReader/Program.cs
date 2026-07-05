@@ -61,6 +61,13 @@ public static class Program
             return;
 
         }
+        else if (stockCode == "ALL")
+        {
+            var stockListResult = await reader.GetStockListAsync();
+            stockCodeList = (from s in stockListResult.StockList
+                             where s.StockCode.StartsWith("0")
+                             select s.StockCode).ToList();
+        }
         else if (stockCode.Contains(","))
         {
             var stockCodes = stockCode.Split(",");
