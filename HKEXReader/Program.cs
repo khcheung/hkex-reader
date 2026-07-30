@@ -100,12 +100,24 @@ public static class Program
         foreach (var stockCodeItem in stockCodeList)
         {
             Console.WriteLine($"Processing Stock Code: {stockCodeItem}");
+            var dataRetrieved = false;
+            var tryCount = 0;
+            while (!dataRetrieved && tryCount < 5)
+            {
+                var stockResult = await reader.GetSearchSDWAsync(stockCodeItem, targetDate != null ? targetDateTime : (DateTime?)null);
 
-            var stockResult = await reader.GetSearchSDWAsync(stockCodeItem, targetDate != null ? targetDateTime : (DateTime?)null);
-
-            await processor.ProcessDataAsync(stockCodeItem, stockResult);
-
-            await Task.Delay(random.Next(2_000, 5_000));
+                if (stockResult.ShareholdingList.Count == 0)
+                {
+                    Console.WriteLine($"No Data Found for Stock Code: {stockCodeItem}");
+                    tryCount++;
+                }
+                else
+                {
+                    await processor.ProcessDataAsync(stockCodeItem, stockResult);
+                    await Task.Delay(random.Next(2_000, 5_000));
+                    dataRetrieved = true;
+                }
+            }
 
         }
 
