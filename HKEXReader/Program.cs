@@ -27,7 +27,7 @@ public static class Program
                     Console.WriteLine("Output Path Error");
                     return;
                 }
-                Environment.CurrentDirectory = outputPath;
+                //Environment.CurrentDirectory = outputPath;
             }
 
             if (args.Length > 2)
