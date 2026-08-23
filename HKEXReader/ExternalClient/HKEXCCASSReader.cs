@@ -36,30 +36,39 @@ public class HKEXCCASSReader : IDisposable
 
         httpClient = new HttpClient(httpMessageHandler);
         httpClient.BaseAddress = new Uri("https://www3.hkexnews.hk/");
-        //httpClient.DefaultRequestHeaders.Add("Origin", "https://www3.hkexnews.hk");
-        //httpClient.DefaultRequestHeaders.Add("Referer", "https://www3.hkexnews.hk/sdw/search/searchsdw.aspx");
-        httpClient.DefaultRequestHeaders.Add("connection", "keep-alive");
-        httpClient.DefaultRequestHeaders.Add("cache-control", "max-age=0");
+        //httpClient.DefaultRequestHeaders.Add("origin", "https://www3.hkexnews.hk");
+        //httpClient.DefaultRequestHeaders.Add("referer", "https://www3.hkexnews.hk/sdw/search/searchsdw.aspx");
+        //httpClient.DefaultRequestHeaders.Add("connection", "keep-alive");
+        httpClient.DefaultRequestHeaders.Add("connection", "close");
+        //httpClient.DefaultRequestHeaders.Add("cache-control", "max-age=0");
+        httpClient.DefaultRequestHeaders.Add("cache-control", "no-cache");
         httpClient.DefaultRequestHeaders.Add("sec-ch-ua", "\"Google Chrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"");
         httpClient.DefaultRequestHeaders.Add("sec-ch-ua-mobile", "?0");
-        httpClient.DefaultRequestHeaders.Add("sec-ch-ua-platform", "\"Windows\"");
-        httpClient.DefaultRequestHeaders.Add("Upgrade-Insecure-Requests", "1");
-        httpClient.DefaultRequestHeaders.Add("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36");
+        //httpClient.DefaultRequestHeaders.Add("sec-ch-ua-platform", "\"Windows\"");
+        httpClient.DefaultRequestHeaders.Add("sec-ch-ua-platform", "\"Chrome OS\"");
+        httpClient.DefaultRequestHeaders.Add("upgrade-insecure-requests", "1");
+        //httpClient.DefaultRequestHeaders.Add("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36");
+        httpClient.DefaultRequestHeaders.Add("user-agent", "Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36");
         httpClient.DefaultRequestHeaders.Add("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7");
         //httpClient.DefaultRequestHeaders.Add("accept-encoding", "*,compress;q=0");
         //httpClient.DefaultRequestHeaders.Add("sec-ch-ua", "\"Looker Browser\"");
-        httpClient.DefaultRequestHeaders.Add("Sec-Fetch-Site", "none");
-        httpClient.DefaultRequestHeaders.Add("Sec-Fetch-Mode", "navigate");
-        httpClient.DefaultRequestHeaders.Add("Sec-Fetch-User", "?1");
-        httpClient.DefaultRequestHeaders.Add("Sec-Fetch-Dest", "document");
+        httpClient.DefaultRequestHeaders.Add("sec-fetch-site", "same-origin");
+        httpClient.DefaultRequestHeaders.Add("sec-fetch-mode", "navigate");
+        httpClient.DefaultRequestHeaders.Add("sec-fetch-user", "?1");
+        httpClient.DefaultRequestHeaders.Add("sec-fetch-dest", "document");
         httpClient.DefaultRequestHeaders.Add("accept-encoding", "gzip, deflate, br, zstd");
         httpClient.DefaultRequestHeaders.Add("accept-language", "en,ja;q=0.9,en-US;q=0.8,zh-TW;q=0.7,zh-CN;q=0.6,zh;q=0.5");
         //httpClient.DefaultRequestHeaders.Add("pragma", "no-cache");
         //httpClient.DefaultRequestHeaders.Add("priority", "u=0, i");
-
+        cookieContainer.Add(new System.Net.Cookie("OptanonAlertBoxClosed", "2026-06-29T18:11:57.522Z", "/", ".hkexnews.hk"));
         cookieContainer.Add(new System.Net.Cookie("OptanonConsent", "isGpcEnabled=0&datestamp=Sun+Jun+29+2026+02%3A20%3A58+GMT%2B0800+(Hong+Kong+Standard+Time)&version=202303.2.0&browserGpcFlag=0&isIABGlobal=false&hosts=&landingPath=https%3A%2F%2Fwww3.hkexnews.hk%2Fsdw%2Fsearch%2Fsearchsdw.aspx&groups=C0001%3A1%2CC0003%3A0%2CC0004%3A0%2CC0002%3A0&AwaitingReconsent=false", "/", ".hkexnews.hk"));
         cookieContainer.Add(new System.Net.Cookie("s_cc", "true", "/", ".hkexnews.hk"));
+        //cookieContainer.Add(new Cookie("s_fid", "522FCF490A797461-364606907A0C49F8", "/", ".hkexnews.hk"));
         cookieContainer.Add(new System.Net.Cookie("sclang", "zh-HK", "/", ".hkexnews.hk"));
+        //cookieContainer.Add(new Cookie("bm_s", "YAAQDO8hF243CKyfAQAAPm6TuAWBoyOGa7eEmtv62555VvmjPpd+gNqUkpyGzW8w1Oqy1tSUNN4LvOWjDL1EXBbhikaEzlMzmLpE+vEceK5BW5AGSEyUxi6BN8v566/qT5k4Nm1yGh/74PAjo3M7FC15GIsTWfZcZB2FOlSU8TquHj8FbTBrZPnPkSNSnhxFa4S0/CnvHEBCqWeTSKoH1U++59K8g/4py+XdR7GaXv75/MbTLMwALWLqZwoszrwKccLDP0YBL0CffZY5sHgbIm8omaP9vT6775w8KuOxe9HHFa14FCiuoIikK/YokNpOv8yiUDOwWh8uIbKdIOjOCBbTAank7j3a5jfkCufZ/2JJq2lGdPabDwpQuu9+KWHNV7Ktex2r/wSs1RiZQFYA9eNUfK6MIbRRz/Iys+dOMCJSSQOoYTu8RcUUBX02WaAN1kAuWYUFepP7qZNhJZQGfl7oY9pEbaYpxi7hgALvS5TkklGm9DXrLi26l2BJIkHQzJrEYOvgDecl88tloq7g/PoEapSdy2uIkPjIOlSnfrWPuM7UCmJuIKwKVYM4noTcT8YAij3MhZfvG1x83frNpHjISnzEWWJ6ghNlA98nstYbvUDqJyXVeTyXdZ9hxEQYs4VtKkrqk98riRML8tRip+vz6H2KvKf6LZNM2En0mByWsdB8eIL3gareHXOJ1Q8Bd4K8rVUKygk6c/UZWjXKn9gfTjEotnjMYKtFJjS/DSE8Lx4pGmLmMEmEUwZbUQKgfbJ1sRbG3UiMqEa/hBNOQjjIiv0vJyrcLoK1ZxpS9/upkHBqZP1iyL6YJXrSPX2FU63ERs4Htofiv3iHP2V11DY/hC9pqAZf6wAVeyNk/jk5TpA771XvmE0YgnST/K89kU0gcBTPk7YD9X9A5p7pB7DNKfY2cojw05RMhFOhRiqEb1Av4xPv7mI/ZtdnXkjO2mpzWVolcSnbzFc2Lpja7SlIHZvg9AVl173n8bTQo2hxkIRPy7CJQtyNMjb9q3b8k9Me7khxdwcxE1lK0Jn8RosPFsKbrYXaDKFY96rLUrw7onnhfLaZcXRBXqLShEVZIsZ7ZqToHWdT1Q8Lt3Nu7Tb7", "/", ".hkexnews.hk"));
+        //cookieContainer.Add(new Cookie("bm_so",  "AABE5CD415ECB70394520168D8D1837F5E78A1C38E944A085671C956DD54C7A1~YAAQDO8hF1U3CKyfAQAAxmmTuAiPD2ow0NX/4r3ZuIH1y0uRcjkuINbsMTn+OwFmzjgl5Pre6k1EFHxtl2ybwD1UiIjnRE0404fuRXJZYCviHnviCMDpUPbtPWkzY5EyuXBsqUJKceEJrkcHCfZLBIRr1iMjXoXJx92keDTpIxu/9+0VM/q3j0CxV+Amg6vkAOnshqUOGQ4GdORoUT4FqsaU08mqAu/sUnJ3estU7hCaH6nIcpKc/AoeWonKiFXH25OY7AIEoPQb4NYjpIVWClYX5ETilZHH4iwNq8HVHr29u1PbtjIVM/UKgVaZusfIa+uOSMXhqHwyOIwO00wPaXqvaZ2nl3nfw2d2N9CsTcsH3F+8GVr+i/SKFIFKKcWzJ6FDGXWEY1p8kFJSO9c9dsgi+f2e0QVJ6quyjSNwBXxCksEsSWOutVJeKAcemRdWb4xlWcG6w7Hf33xsY8AL1A8WCx0=", "/", ".hkexnews.hk"));
+        //cookieContainer.Add(new Cookie("bm_lso", "AABE5CD415ECB70394520168D8D1837F5E78A1C38E944A085671C956DD54C7A1~YAAQDO8hF1U3CKyfAQAAxmmTuAiPD2ow0NX/4r3ZuIH1y0uRcjkuINbsMTn+OwFmzjgl5Pre6k1EFHxtl2ybwD1UiIjnRE0404fuRXJZYCviHnviCMDpUPbtPWkzY5EyuXBsqUJKceEJrkcHCfZLBIRr1iMjXoXJx92keDTpIxu/9+0VM/q3j0CxV+Amg6vkAOnshqUOGQ4GdORoUT4FqsaU08mqAu/sUnJ3estU7hCaH6nIcpKc/AoeWonKiFXH25OY7AIEoPQb4NYjpIVWClYX5ETilZHH4iwNq8HVHr29u1PbtjIVM/UKgVaZusfIa+uOSMXhqHwyOIwO00wPaXqvaZ2nl3nfw2d2N9CsTcsH3F+8GVr+i/SKFIFKKcWzJ6FDGXWEY1p8kFJSO9c9dsgi+f2e0QVJ6quyjSNwBXxCksEsSWOutVJeKAcemRdWb4xlWcG6w7Hf33xsY8AL1A8WCx0=~1785508095918", "/", ".hkexnews.hk"));
+        //cookieContainer.Add(new Cookie("AMCV_DD0356406298B0640A495CB8%40AdobeOrg", "179643557%7CMCIDTS%7C20666%7CMCMID%7C38953796920595910233361173386624516549%7CvVersion%7C5.5.0", "/", ".hkexnews.hk"));
     }
 
     private ASPNetPage lastPage = null!;
@@ -67,8 +76,28 @@ public class HKEXCCASSReader : IDisposable
     private async Task<ASPNetPage> LoadPageAsync()
     {
         // Get Page
+        //Console.WriteLine(DateTime.Now);
         var searchPage = await GetPageAsync("/sdw/search/searchsdw.aspx");
+        // var b = new Regex("src=\"([^\"]*)\" defer></script>");
+        // var mSrc = b.Match(searchPage);
+        // if (mSrc.Success)
+        // {
+        //     var mUrl = mSrc.Groups[1].Value;
+        //     Console.WriteLine(DateTime.Now);
+        //     var mmPage = await GetPageAsync(mUrl);
+        // }
+        //Console.WriteLine(DateTime.Now);
 
+        // var cookie = cookieContainer.GetCookies(new Uri("https://www3.hkexnews.hk"));
+        // var soCookie = cookie.Where(c => c.Name == "bm_so").FirstOrDefault();
+        // if (soCookie != null)
+        // {
+        //     var lsoValue = $"{soCookie.Value}~{DateTimeOffset.Now.ToUnixTimeMilliseconds()}";
+        //     cookieContainer.Add(new System.Net.Cookie("bm_lso", lsoValue, "/", ".hkexnews.hk"));
+        // }
+
+        // var searchPage2 = await GetPageAsync("/sdw/search/searchsdw.aspx");
+        // Console.WriteLine(DateTime.Now);
         ASPNetPage aspNetPage = searchPage;
 
         return aspNetPage;
@@ -109,7 +138,7 @@ public class HKEXCCASSReader : IDisposable
 
         stockList = stockList.OrderBy(s => s.StockCode).ToList();
         result.StockList = stockList;
-        result.RecordDate = shareholdingDate.Value; 
+        result.RecordDate = shareholdingDate.Value;
         return result;
 
 
