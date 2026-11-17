@@ -48,74 +48,88 @@ public class DownloadCommand : AsyncCommand<DownloadSettings>
 
         Console.WriteLine($"File Output Path: {outputPath}");
 
-        HKEXCCASSReader reader = new HKEXCCASSReader();
-        DataProcessor processor = new DataProcessor(outputPath);
-
-        List<String> stockCodeList = [];
-
-        if (stockCode == "STOCKCODE")
+        SqliteDataStore? sqliteStore = null;
+        if (!string.IsNullOrWhiteSpace(settings.SqlitePath))
         {
-            var stockListResult = await reader.GetStockListAsync();
-            await processor.SaveStockListAsync(stockListResult.StockList, stockListResult.RecordDate);
-            return 0;
-
+            sqliteStore = new SqliteDataStore(settings.SqlitePath);
+            Console.WriteLine($"SQLite Output Path: {Path.GetFullPath(settings.SqlitePath)}");
         }
-        else if (stockCode == "ALL")
+
+        try
         {
-            var stockListResult = await reader.GetStockListAsync();
-            stockCodeList = (from s in stockListResult.StockList
-                             where s.StockCode.StartsWith("0")
-                             select s.StockCode).ToList();
-        }
-        else if (stockCode.Contains(","))
-        {
-            var stockCodes = stockCode.Split(",");
-            foreach (var code in stockCodes)
+            HKEXCCASSReader reader = new HKEXCCASSReader();
+            DataProcessor processor = new DataProcessor(outputPath, sqliteStore);
+
+            List<String> stockCodeList = [];
+
+            if (stockCode == "STOCKCODE")
             {
-                if (!Int32.TryParse(code, out var _))
+                var stockListResult = await reader.GetStockListAsync();
+                await processor.SaveStockListAsync(stockListResult.StockList, stockListResult.RecordDate);
+                return 0;
+
+            }
+            else if (stockCode == "ALL")
+            {
+                var stockListResult = await reader.GetStockListAsync();
+                stockCodeList = (from s in stockListResult.StockList
+                                 where s.StockCode.StartsWith("0")
+                                 select s.StockCode).ToList();
+            }
+            else if (stockCode.Contains(","))
+            {
+                var stockCodes = stockCode.Split(",");
+                foreach (var code in stockCodes)
+                {
+                    if (!Int32.TryParse(code, out var _))
+                    {
+                        Console.WriteLine("Stock Code Error");
+                        return 1;
+                    }
+                    stockCodeList.Add(code);
+                }
+            }
+            else
+            {
+                if (!Int32.TryParse(stockCode, out var _))
                 {
                     Console.WriteLine("Stock Code Error");
                     return 1;
                 }
-                stockCodeList.Add(code);
+                stockCodeList.Add(stockCode);
             }
-        }
-        else
-        {
-            if (!Int32.TryParse(stockCode, out var _))
+            //HKEXCCASSReader reader = new HKEXCCASSReader();
+
+            Random random = new Random();
+
+            foreach (var stockCodeItem in stockCodeList)
             {
-                Console.WriteLine("Stock Code Error");
-                return 1;
+                Console.WriteLine($"Processing Stock Code: {stockCodeItem}");
+                var dataRetrieved = false;
+                var tryCount = 0;
+                while (!dataRetrieved && tryCount < 5)
+                {
+                    var stockResult = await reader.GetSearchSDWAsync(stockCodeItem, targetDate != null ? targetDateTime : (DateTime?)null);
+
+                    if (stockResult.ShareholdingList.Count == 0)
+                    {
+                        Console.WriteLine($"No Data Found for Stock Code: {stockCodeItem}");
+                        tryCount++;
+                    }
+                    else
+                    {
+                        await processor.ProcessDataAsync(stockCodeItem, stockResult);
+                        await Task.Delay(random.Next(2_000, 5_000));
+                        dataRetrieved = true;
+                    }
+                }
+
             }
-            stockCodeList.Add(stockCode);
+            return 0;
         }
-        //HKEXCCASSReader reader = new HKEXCCASSReader();
-
-        Random random = new Random();
-
-        foreach (var stockCodeItem in stockCodeList)
+        finally
         {
-            Console.WriteLine($"Processing Stock Code: {stockCodeItem}");
-            var dataRetrieved = false;
-            var tryCount = 0;
-            while (!dataRetrieved && tryCount < 5)
-            {
-                var stockResult = await reader.GetSearchSDWAsync(stockCodeItem, targetDate != null ? targetDateTime : (DateTime?)null);
-
-                if (stockResult.ShareholdingList.Count == 0)
-                {
-                    Console.WriteLine($"No Data Found for Stock Code: {stockCodeItem}");
-                    tryCount++;
-                }
-                else
-                {
-                    await processor.ProcessDataAsync(stockCodeItem, stockResult);
-                    await Task.Delay(random.Next(2_000, 5_000));
-                    dataRetrieved = true;
-                }
-            }
-
+            sqliteStore?.Dispose();
         }
-        return 0;
     }
 }

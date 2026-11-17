@@ -2,9 +2,10 @@ using HKEXReader.ExternalClient;
 
 namespace HKEXReader;
 
-public class DataProcessor(String outputPath)
+public class DataProcessor(String outputPath, SqliteDataStore? sqliteStore = null)
 {
     private readonly string outputPath = outputPath;
+    private readonly SqliteDataStore? sqliteStore = sqliteStore;
 
     public async Task ProcessDataAsync(String stockCode, SearchSDWResultDto data)
     {
@@ -157,6 +158,7 @@ public class DataProcessor(String outputPath)
                 StakeInCCASS = (stakeInCCASS).ToString("0.00")
             };
             records.Add(newRecord);
+            todayRecord = newRecord;
         }
 
         var orderedRecords = records.OrderByDescending(r => r.Date).ToList();
@@ -185,6 +187,14 @@ public class DataProcessor(String outputPath)
                 await writer.WriteLineAsync(line);
             }
             writer.Close();
+        }
+
+        if (sqliteStore != null && todayRecord != null)
+        {
+            var summaryRows = summaryData
+                .Select(item => (item.Category, item.ShareholdingDecimal, item.Participants, item.Percentage))
+                .ToList();
+            sqliteStore.SaveSnapshot(stockCode, data, holdingData, summaryRows, todayRecord);
         }
     }
 
@@ -224,5 +234,6 @@ public class DataProcessor(String outputPath)
             writer.Close();
         }
 
+        sqliteStore?.SaveStockList(stockList, recordDate);
     }
 }
