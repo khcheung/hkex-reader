@@ -43,3 +43,5 @@ Layout matches CSV output:
 - `{output}/stockList.db` – stock list (when using `STOCKCODE`)
 
 Per-stock tables: `snapshots`, `holdings`, `summary`, `concentration`.
+
+`holdings.participant_id` is nullable (many CCASS rows have no participant ID).

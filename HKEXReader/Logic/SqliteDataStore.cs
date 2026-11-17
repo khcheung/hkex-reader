@@ -58,14 +58,17 @@ public sealed class SqliteDataStore : IDisposable
             );
 
             CREATE TABLE IF NOT EXISTS holdings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
                 record_date TEXT NOT NULL,
-                participant_id TEXT NOT NULL,
+                participant_id TEXT,
                 name TEXT NOT NULL,
                 shareholding REAL NOT NULL,
                 percentage TEXT NOT NULL,
-                cumulative_percentage TEXT NOT NULL,
-                PRIMARY KEY (record_date, participant_id)
+                cumulative_percentage TEXT NOT NULL
             );
+
+            CREATE INDEX IF NOT EXISTS idx_holdings_record_date
+                ON holdings(record_date);
 
             CREATE TABLE IF NOT EXISTS summary (
                 record_date TEXT NOT NULL,
@@ -155,7 +158,8 @@ public sealed class SqliteDataStore : IDisposable
             foreach (var item in holdings)
             {
                 insertHolding.Parameters["$record_date"].Value = recordDate;
-                insertHolding.Parameters["$participant_id"].Value = item.ID;
+                insertHolding.Parameters["$participant_id"].Value =
+                    string.IsNullOrWhiteSpace(item.ID) ? DBNull.Value : item.ID;
                 insertHolding.Parameters["$name"].Value = item.Name;
                 insertHolding.Parameters["$shareholding"].Value = item.ShareholdingDecimal;
                 insertHolding.Parameters["$percentage"].Value = item.Percentage;
