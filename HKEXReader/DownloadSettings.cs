@@ -14,6 +14,6 @@ public class DownloadSettings : CommandSettings
     [CommandOption("-d|--date")]
     public string TargetDate { get; set; } = null!;
 
-    [CommandOption("-s|--sqlite <PATH>")]
-    public string? SqlitePath { get; set; }
+    [CommandOption("-s|--sqlite")]
+    public bool UseSqlite { get; set; }
 }
