@@ -1,11 +1,14 @@
-using System.Diagnostics;
 using System.Net;
-using System.Text;
 using System.Text.RegularExpressions;
 using HKEXReader.Extensions;
 
 namespace HKEXReader.ExternalClient;
 
+/// <summary>
+/// HTTP client for the HKEX CCASS "Search SDW" pages.
+/// Mimics a browser session (cookies + headers), posts ASP.NET WebForms
+/// ViewState fields, and scrapes shareholding HTML into DTOs.
+/// </summary>
 public class HKEXCCASSReader : IDisposable
 {
     private HttpClient httpClient = null!;
@@ -18,15 +21,16 @@ public class HKEXCCASSReader : IDisposable
         this.InitializeClient();
     }
 
+    /// <summary>
+    /// Configure HttpClient to look like a Chrome-on-ChromeOS browser talking to hkexnews.hk.
+    /// Cookie consent / analytics cookies are seeded so the site does not redirect to a banner.
+    /// </summary>
     private void InitializeClient()
     {
         cookieContainer = new CookieContainer();
 
         httpMessageHandler = new HttpClientHandler
         {
-            //UseProxy = true,
-            //Proxy = new WebProxy("127.0.0.1", 8888),
-            //ServerCertificateCustomValidationCallback = (m, c, cc, p) => true,
             CookieContainer = cookieContainer,
             UseCookies = true,
             AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
@@ -36,73 +40,48 @@ public class HKEXCCASSReader : IDisposable
 
         httpClient = new HttpClient(httpMessageHandler);
         httpClient.BaseAddress = new Uri("https://www3.hkexnews.hk/");
-        //httpClient.DefaultRequestHeaders.Add("origin", "https://www3.hkexnews.hk");
-        //httpClient.DefaultRequestHeaders.Add("referer", "https://www3.hkexnews.hk/sdw/search/searchsdw.aspx");
-        //httpClient.DefaultRequestHeaders.Add("connection", "keep-alive");
+
+        // Browser-like request headers expected by the HKEX news site.
         httpClient.DefaultRequestHeaders.Add("connection", "close");
-        //httpClient.DefaultRequestHeaders.Add("cache-control", "max-age=0");
         httpClient.DefaultRequestHeaders.Add("cache-control", "no-cache");
         httpClient.DefaultRequestHeaders.Add("sec-ch-ua", "\"Google Chrome\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"");
         httpClient.DefaultRequestHeaders.Add("sec-ch-ua-mobile", "?0");
-        //httpClient.DefaultRequestHeaders.Add("sec-ch-ua-platform", "\"Windows\"");
         httpClient.DefaultRequestHeaders.Add("sec-ch-ua-platform", "\"Chrome OS\"");
         httpClient.DefaultRequestHeaders.Add("upgrade-insecure-requests", "1");
-        //httpClient.DefaultRequestHeaders.Add("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36");
         httpClient.DefaultRequestHeaders.Add("user-agent", "Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36");
         httpClient.DefaultRequestHeaders.Add("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7");
-        //httpClient.DefaultRequestHeaders.Add("accept-encoding", "*,compress;q=0");
-        //httpClient.DefaultRequestHeaders.Add("sec-ch-ua", "\"Looker Browser\"");
         httpClient.DefaultRequestHeaders.Add("sec-fetch-site", "same-origin");
         httpClient.DefaultRequestHeaders.Add("sec-fetch-mode", "navigate");
         httpClient.DefaultRequestHeaders.Add("sec-fetch-user", "?1");
         httpClient.DefaultRequestHeaders.Add("sec-fetch-dest", "document");
         httpClient.DefaultRequestHeaders.Add("accept-encoding", "gzip, deflate, br, zstd");
         httpClient.DefaultRequestHeaders.Add("accept-language", "en,ja;q=0.9,en-US;q=0.8,zh-TW;q=0.7,zh-CN;q=0.6,zh;q=0.5");
-        //httpClient.DefaultRequestHeaders.Add("pragma", "no-cache");
-        //httpClient.DefaultRequestHeaders.Add("priority", "u=0, i");
+
+        // Pre-seed consent / analytics cookies so searches are not blocked by the banner.
         cookieContainer.Add(new System.Net.Cookie("OptanonAlertBoxClosed", "2026-06-29T18:11:57.522Z", "/", ".hkexnews.hk"));
         cookieContainer.Add(new System.Net.Cookie("OptanonConsent", "isGpcEnabled=0&datestamp=Sun+Jun+29+2026+02%3A20%3A58+GMT%2B0800+(Hong+Kong+Standard+Time)&version=202303.2.0&browserGpcFlag=0&isIABGlobal=false&hosts=&landingPath=https%3A%2F%2Fwww3.hkexnews.hk%2Fsdw%2Fsearch%2Fsearchsdw.aspx&groups=C0001%3A1%2CC0003%3A0%2CC0004%3A0%2CC0002%3A0&AwaitingReconsent=false", "/", ".hkexnews.hk"));
         cookieContainer.Add(new System.Net.Cookie("s_cc", "true", "/", ".hkexnews.hk"));
-        //cookieContainer.Add(new Cookie("s_fid", "522FCF490A797461-364606907A0C49F8", "/", ".hkexnews.hk"));
         cookieContainer.Add(new System.Net.Cookie("sclang", "zh-HK", "/", ".hkexnews.hk"));
-        //cookieContainer.Add(new Cookie("bm_s", "YAAQDO8hF243CKyfAQAAPm6TuAWBoyOGa7eEmtv62555VvmjPpd+gNqUkpyGzW8w1Oqy1tSUNN4LvOWjDL1EXBbhikaEzlMzmLpE+vEceK5BW5AGSEyUxi6BN8v566/qT5k4Nm1yGh/74PAjo3M7FC15GIsTWfZcZB2FOlSU8TquHj8FbTBrZPnPkSNSnhxFa4S0/CnvHEBCqWeTSKoH1U++59K8g/4py+XdR7GaXv75/MbTLMwALWLqZwoszrwKccLDP0YBL0CffZY5sHgbIm8omaP9vT6775w8KuOxe9HHFa14FCiuoIikK/YokNpOv8yiUDOwWh8uIbKdIOjOCBbTAank7j3a5jfkCufZ/2JJq2lGdPabDwpQuu9+KWHNV7Ktex2r/wSs1RiZQFYA9eNUfK6MIbRRz/Iys+dOMCJSSQOoYTu8RcUUBX02WaAN1kAuWYUFepP7qZNhJZQGfl7oY9pEbaYpxi7hgALvS5TkklGm9DXrLi26l2BJIkHQzJrEYOvgDecl88tloq7g/PoEapSdy2uIkPjIOlSnfrWPuM7UCmJuIKwKVYM4noTcT8YAij3MhZfvG1x83frNpHjISnzEWWJ6ghNlA98nstYbvUDqJyXVeTyXdZ9hxEQYs4VtKkrqk98riRML8tRip+vz6H2KvKf6LZNM2En0mByWsdB8eIL3gareHXOJ1Q8Bd4K8rVUKygk6c/UZWjXKn9gfTjEotnjMYKtFJjS/DSE8Lx4pGmLmMEmEUwZbUQKgfbJ1sRbG3UiMqEa/hBNOQjjIiv0vJyrcLoK1ZxpS9/upkHBqZP1iyL6YJXrSPX2FU63ERs4Htofiv3iHP2V11DY/hC9pqAZf6wAVeyNk/jk5TpA771XvmE0YgnST/K89kU0gcBTPk7YD9X9A5p7pB7DNKfY2cojw05RMhFOhRiqEb1Av4xPv7mI/ZtdnXkjO2mpzWVolcSnbzFc2Lpja7SlIHZvg9AVl173n8bTQo2hxkIRPy7CJQtyNMjb9q3b8k9Me7khxdwcxE1lK0Jn8RosPFsKbrYXaDKFY96rLUrw7onnhfLaZcXRBXqLShEVZIsZ7ZqToHWdT1Q8Lt3Nu7Tb7", "/", ".hkexnews.hk"));
-        //cookieContainer.Add(new Cookie("bm_so",  "AABE5CD415ECB70394520168D8D1837F5E78A1C38E944A085671C956DD54C7A1~YAAQDO8hF1U3CKyfAQAAxmmTuAiPD2ow0NX/4r3ZuIH1y0uRcjkuINbsMTn+OwFmzjgl5Pre6k1EFHxtl2ybwD1UiIjnRE0404fuRXJZYCviHnviCMDpUPbtPWkzY5EyuXBsqUJKceEJrkcHCfZLBIRr1iMjXoXJx92keDTpIxu/9+0VM/q3j0CxV+Amg6vkAOnshqUOGQ4GdORoUT4FqsaU08mqAu/sUnJ3estU7hCaH6nIcpKc/AoeWonKiFXH25OY7AIEoPQb4NYjpIVWClYX5ETilZHH4iwNq8HVHr29u1PbtjIVM/UKgVaZusfIa+uOSMXhqHwyOIwO00wPaXqvaZ2nl3nfw2d2N9CsTcsH3F+8GVr+i/SKFIFKKcWzJ6FDGXWEY1p8kFJSO9c9dsgi+f2e0QVJ6quyjSNwBXxCksEsSWOutVJeKAcemRdWb4xlWcG6w7Hf33xsY8AL1A8WCx0=", "/", ".hkexnews.hk"));
-        //cookieContainer.Add(new Cookie("bm_lso", "AABE5CD415ECB70394520168D8D1837F5E78A1C38E944A085671C956DD54C7A1~YAAQDO8hF1U3CKyfAQAAxmmTuAiPD2ow0NX/4r3ZuIH1y0uRcjkuINbsMTn+OwFmzjgl5Pre6k1EFHxtl2ybwD1UiIjnRE0404fuRXJZYCviHnviCMDpUPbtPWkzY5EyuXBsqUJKceEJrkcHCfZLBIRr1iMjXoXJx92keDTpIxu/9+0VM/q3j0CxV+Amg6vkAOnshqUOGQ4GdORoUT4FqsaU08mqAu/sUnJ3estU7hCaH6nIcpKc/AoeWonKiFXH25OY7AIEoPQb4NYjpIVWClYX5ETilZHH4iwNq8HVHr29u1PbtjIVM/UKgVaZusfIa+uOSMXhqHwyOIwO00wPaXqvaZ2nl3nfw2d2N9CsTcsH3F+8GVr+i/SKFIFKKcWzJ6FDGXWEY1p8kFJSO9c9dsgi+f2e0QVJ6quyjSNwBXxCksEsSWOutVJeKAcemRdWb4xlWcG6w7Hf33xsY8AL1A8WCx0=~1785508095918", "/", ".hkexnews.hk"));
-        //cookieContainer.Add(new Cookie("AMCV_DD0356406298B0640A495CB8%40AdobeOrg", "179643557%7CMCIDTS%7C20666%7CMCMID%7C38953796920595910233361173386624516549%7CvVersion%7C5.5.0", "/", ".hkexnews.hk"));
     }
 
+    /// <summary>
+    /// Cached last ASP.NET page. Reused so subsequent POSTs can send a valid ViewState
+    /// without reloading the empty search form every time.
+    /// </summary>
     private ASPNetPage lastPage = null!;
 
+    /// <summary>GET the empty Search SDW form and parse its ASP.NET hidden fields.</summary>
     private async Task<ASPNetPage> LoadPageAsync()
     {
-        // Get Page
-        //Console.WriteLine(DateTime.Now);
         var searchPage = await GetPageAsync("/sdw/search/searchsdw.aspx");
-        // var b = new Regex("src=\"([^\"]*)\" defer></script>");
-        // var mSrc = b.Match(searchPage);
-        // if (mSrc.Success)
-        // {
-        //     var mUrl = mSrc.Groups[1].Value;
-        //     Console.WriteLine(DateTime.Now);
-        //     var mmPage = await GetPageAsync(mUrl);
-        // }
-        //Console.WriteLine(DateTime.Now);
-
-        // var cookie = cookieContainer.GetCookies(new Uri("https://www3.hkexnews.hk"));
-        // var soCookie = cookie.Where(c => c.Name == "bm_so").FirstOrDefault();
-        // if (soCookie != null)
-        // {
-        //     var lsoValue = $"{soCookie.Value}~{DateTimeOffset.Now.ToUnixTimeMilliseconds()}";
-        //     cookieContainer.Add(new System.Net.Cookie("bm_lso", lsoValue, "/", ".hkexnews.hk"));
-        // }
-
-        // var searchPage2 = await GetPageAsync("/sdw/search/searchsdw.aspx");
-        // Console.WriteLine(DateTime.Now);
         ASPNetPage aspNetPage = searchPage;
 
         return aspNetPage;
     }
 
+    /// <summary>
+    /// Fetch the CCASS stock list JSON for a shareholding date (clamped to the site's min/max).
+    /// </summary>
     public async Task<StockListResultDto> GetStockListAsync(DateTime? shareholdingDate = null)
     {
         StockListResultDto result = new();
@@ -117,6 +96,8 @@ public class HKEXCCASSReader : IDisposable
             lastPage = await LoadPageAsync();
         }
         var aspNetPage = lastPage;
+
+        // Clamp requested date to the window published on the Search SDW page.
         var maxDate = aspNetPage.GetMaxDate() ?? DateTime.Today;
         var minDate = aspNetPage.GetMinDate() ?? DateTime.Today.AddDays(-365);
 
@@ -130,8 +111,10 @@ public class HKEXCCASSReader : IDisposable
             shareholdingDate = minDate;
         }
 
+        // HTML listing page (not parsed further; warms the session / date context).
         var stockListPage = await GetPageAsync($"/sdw/search/ccass_stock_list.htm?sortby=stockcode&shareholdingdate={shareholdingDate:yyyyMMdd}");
 
+        // JSON endpoint returns [{ "c": code, "n": name }, ...].
         var stockApiUrl = $"/sdw/search/stocklist.aspx?sortby=stockname&shareholdingdate={shareholdingDate:yyyyMMdd}";
         var stockResult = await GetPageAsync(stockApiUrl);
         var stockList = System.Text.Json.JsonSerializer.Deserialize<List<StockListItemDto>>(stockResult)!;
@@ -144,6 +127,10 @@ public class HKEXCCASSReader : IDisposable
 
     }
 
+    /// <summary>
+    /// Search shareholding disclosure for one stock on a given date.
+    /// Posts the ASP.NET form, then regex-scrapes the summary and participant tables.
+    /// </summary>
     public async Task<SearchSDWResultDto> GetSearchSDWAsync(String stockCode, DateTime? shareholdingDate = null)
     {
         SearchSDWResultDto result = new();
@@ -155,7 +142,7 @@ public class HKEXCCASSReader : IDisposable
 
         Console.WriteLine("Load Page (SearchSDW)");
 
-        // Get Page
+        // Ensure we have a valid ViewState from a prior GET (or a previous search POST).
         if (lastPage == null)
         {
             lastPage = await LoadPageAsync();
@@ -177,14 +164,12 @@ public class HKEXCCASSReader : IDisposable
 
         result.RecordDate = shareholdingDate.Value;
 
-        // Get ViewState
+        // ASP.NET WebForms anti-forgery / state fields required on every postback.
         var viewState = aspNetPage.ViewState;
-        // Get EventValidation
         var eventValidation = aspNetPage.EventValidation;
-        // Get __VIEWSTATEGENERATOR
         var viewStateGenerator = aspNetPage.ViewStateGenerator;
 
-        // Prepare Form Data
+        // Form fields mirror a browser click of the Search button on searchsdw.aspx.
         var formData = new Dictionary<string, string>
         {
             { "__EVENTTARGET", "btnSearch" },
@@ -208,35 +193,19 @@ public class HKEXCCASSReader : IDisposable
 
         var content = new FormUrlEncodedContent(formData);
 
-        // Post Form Data
         var resultPage = await PostPageAsync("/sdw/search/searchsdw.aspx", content);
 
+        // Keep the result page's ViewState for the next search POST.
         ASPNetPage rPage = resultPage;
         this.lastPage = rPage;
 
 
-        // Process Response
-
+        // --- Parse summary categories (Market Intermediaries, NCIP, etc.) ---
         Regex rxSummaryTable = new Regex(@"<div class=""ccass-search-summary-table(.*?)<hr />", RegexOptions.Singleline);
         var mSummaryTable = rxSummaryTable.Match(resultPage);
         if (mSummaryTable.Success)
         {
-
-            // <div class="ccass-search-datarow">
-            // <div class="summary-category">Market Intermediaries</div>
-            // <div class="shareholding">
-            // <div class="header">Shareholding in CCASS </div>
-            // <div class="value">1,546,313,565</div>
-            // </div>
-            // <div class="number-of-participants">
-            // <div class="header">Number of Participants</div>
-            // <div class="value">170</div>
-            // </div>
-            // <div class="percent-of-participants">
-            // <div class="header">% of the total number of Issued Shares/ Warrants/ Units</div>
-            // <div class="value">83.70%</div>
-            // </div>
-            // </div>
+            // Each datarow: category, shareholding, participant count, % of issued shares.
             Regex rxRow = new Regex(@"<div class=""ccass-search-datarow"">(?:.*?)<div class=""summary-category"">([^>]*)</div>(?:.*?)<div class=""value"">([^>]*)</div>(?:.*?)<div class=""value"">([^>]*)</div>(?:.*?)<div class=""value"">([^>]*)</div>", RegexOptions.Singleline);
 
             var mRowCollection = rxRow.Matches(mSummaryTable.Groups[0].Value);
@@ -257,7 +226,7 @@ public class HKEXCCASSReader : IDisposable
 
             }
 
-            //<div class="summary-value">1,847,269,704</div>
+            // Total issued shares shown in the summary footer.
             Regex rxSummaryValue = new Regex(@"<div class=""summary-value"">([^<]*)</div>");
             var mSummaryValue = rxSummaryValue.Match(mSummaryTable.Groups[1].Value);
             if (mSummaryValue.Success)
@@ -269,6 +238,7 @@ public class HKEXCCASSReader : IDisposable
         }
 
 
+        // --- Parse participant detail table (ID, Name, Address, Holding, %) ---
         Regex rxTable = new Regex(@"<table class=""table(?:[^>]*)>(.*?)</table>", RegexOptions.Singleline);
         var mTable = rxTable.Match(resultPage);
         if (mTable.Success)
@@ -282,6 +252,7 @@ public class HKEXCCASSReader : IDisposable
                 var tableBody = mBody.Groups[1].Value;
 
                 Regex rxRow = new Regex(@"<tr>(.*?)</tr>", RegexOptions.Singleline);
+                // Mobile layout cells hold the values we need (5 per data row).
                 Regex rxData = new Regex(@"div class=""mobile-list-body"">([^<]*)</div>");
                 var mRowCollection = rxRow.Matches(tableBody);
                 foreach (var mRow in mRowCollection.OfType<Match>())
@@ -320,12 +291,18 @@ public class HKEXCCASSReader : IDisposable
             return responseBody;
         }
     }
+
+    /// <summary>
+    /// POST form data. Before posting, refresh the Akamai <c>bm_lso</c> cookie from
+    /// the current <c>bm_so</c> value (timestamp suffix) when present.
+    /// </summary>
     private async Task<String> PostPageAsync(String url, HttpContent content)
     {
         var cookie = cookieContainer.GetCookies(new Uri("https://www3.hkexnews.hk"));
         var soCookie = cookie.Where(c => c.Name == "bm_so").FirstOrDefault();
         if (soCookie != null)
         {
+            // bm_lso = bm_so value + "~" + current unix ms — expected by bot-management.
             var lsoValue = $"{soCookie.Value}~{DateTimeOffset.Now.ToUnixTimeMilliseconds()}";
             cookieContainer.Add(new System.Net.Cookie("bm_lso", lsoValue, "/", ".hkexnews.hk"));
         }
