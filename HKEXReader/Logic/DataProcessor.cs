@@ -2,11 +2,20 @@ using HKEXReader.ExternalClient;
 
 namespace HKEXReader;
 
+/// <summary>
+/// Turns raw CCASS search results into per-stock snapshot and concentration reports
+/// (CSV + Markdown) under <c>{outputPath}/{stockCode}/</c>.
+/// Optionally also writes the same data to SQLite when <paramref name="useSqlite"/> is true.
+/// </summary>
 public class DataProcessor(String outputPath, bool useSqlite = false)
 {
     private readonly string outputPath = outputPath;
     private readonly bool useSqlite = useSqlite;
 
+    /// <summary>
+    /// Write a point-in-time shareholding snapshot and upsert today's concentration row
+    /// for the given stock.
+    /// </summary>
     public async Task ProcessDataAsync(String stockCode, SearchSDWResultDto data)
     {
         var targetFolder = Path.Combine(outputPath, stockCode);
@@ -15,17 +24,18 @@ public class DataProcessor(String outputPath, bool useSqlite = false)
             Directory.CreateDirectory(targetFolder);
         }
 
-        // Create Snapshot
+        // --- Snapshot files (one pair per record date) ---
         var snapshotFileName = Path.Combine(targetFolder, $"snapshot_{data.RecordDate:yyyyMMdd}.csv");
         var snapshotMDFileName = Path.Combine(targetFolder, $"snapshot_{data.RecordDate:yyyyMMdd}.md");
 
+        // Map participant rows; shareholding arrives as a formatted string from HKEX HTML.
         var holdingData = data.ShareholdingList.Select(item => new HoldingDataItem()
         {
             ID = item.ID,
             Name = item.Name,
             ShareholdingDecimal = Decimal.TryParse(item.Shareholding, out var shareholdingValue) ? shareholdingValue : 0m,
             Percentage = item.Percentage,
-            CumulativePercentage = "" // Placeholder for cumulative percentage calculation
+            CumulativePercentage = "" // filled below after sorting by size
         }).ToList();
 
         var summaryData = data.shareholdingSummaryList.Select(item => new
@@ -37,10 +47,9 @@ public class DataProcessor(String outputPath, bool useSqlite = false)
             item.Percentage
         }).ToList();
 
-        //var totalHolder = holdingData.Sum(r => r.ShareholdingDecimal);
         var totalHolding = Decimal.TryParse(data.TotalShareholding, out var totalHoldingValue) ? totalHoldingValue : 0m;
 
-
+        // Running cumulative % of total issued shares, largest holders first.
         var cumulativeShareholding = 0m;
         holdingData.OrderByDescending(r => r.ShareholdingDecimal).ToList().ForEach(r =>
         {
@@ -48,27 +57,17 @@ public class DataProcessor(String outputPath, bool useSqlite = false)
             r.CumulativePercentage = $"{(totalHolding > 0 ? (cumulativeShareholding / totalHolding) * 100 : 0).ToString("0.00")}%";
         });
 
+        // Snapshot CSV — participant-level holdings with cumulative %.
         using (var writer = new StreamWriter(snapshotFileName))
         {
             using (var csvWriter = new CsvHelper.CsvWriter(writer, System.Globalization.CultureInfo.InvariantCulture))
             {
                 await csvWriter.WriteRecordsAsync(holdingData);
             }
-            // // Write Header
-            // await writer.WriteLineAsync("ID,Name,Shareholding,Percentage,CumulativePercentage");
-
-            // var cumulativeShareholding = 0m;
-
-            // foreach (var item in holdingData)
-            // {
-            //     cumulativeShareholding += item.ShareholdingDecimal;
-            //     var cumulativePercentage = totalHolding > 0 ? (cumulativeShareholding / totalHolding) * 100 : 0;
-            //     var line = $"{item.ID},{item.Name},{item.ShareholdingDecimal},{item.Percentage},{cumulativePercentage:0.00}%";
-            //     await writer.WriteLineAsync(line);
-            // }
             writer.Close();
         }
 
+        // Snapshot Markdown — human-readable summary + detail tables.
         using (var writer = new StreamWriter(snapshotMDFileName))
         {
             await writer.WriteLineAsync($"# Snapshot for {stockCode} on {data.RecordDate:yyyy-MM-dd}");
@@ -96,8 +95,6 @@ public class DataProcessor(String outputPath, bool useSqlite = false)
             await writer.WriteLineAsync("|ID|Name|Shareholding|Percentage|CumulativePercentage|");
             await writer.WriteLineAsync("|---|---|---|---|---|");
 
-            //var cumulativeShareholding = 0m;
-
             foreach (var item in holdingData)
             {
                 var line = $"|{item.ID}|{item.Name}|{item.ShareholdingDecimal}|{item.Percentage}|{item.CumulativePercentage}|";
@@ -106,16 +103,16 @@ public class DataProcessor(String outputPath, bool useSqlite = false)
             writer.Close();
         }
 
-        // Concentration Analysis
+        // --- Concentration analysis (append/update historical series) ---
         var concentrationFileName = Path.Combine(targetFolder, $"concentration.csv");
         var concentrationMDFileName = Path.Combine(targetFolder, $"concentration.md");
 
+        // Load prior concentration history so we can upsert today's row.
         List<ConcentrationAnalysisItem> records = [];
         if (File.Exists(concentrationFileName))
         {
             using (var reader = new StreamReader(concentrationFileName))
             {
-                // Read existing data if needed
                 using (var csvReader = new CsvHelper.CsvReader(reader, System.Globalization.CultureInfo.InvariantCulture))
                 {
                     records = await csvReader.GetRecordsAsync<ConcentrationAnalysisItem>().ToListAsync();
@@ -124,21 +121,23 @@ public class DataProcessor(String outputPath, bool useSqlite = false)
             }
         }
 
+        // Denominators used by concentration ratios (HKEX summary categories).
         var totalCCASS = summaryData.Select(r => r.ShareholdingDecimal).Sum();
         var totalIntermediary = summaryData.Where(r => r.Category == "Market Intermediaries").Select(r => r.ShareholdingDecimal).Sum();
         var totalIntermediaryNCIP = totalIntermediary + (summaryData.FirstOrDefault(r => r.Category == "Non-consenting Investor Participants")?.ShareholdingDecimal ?? 0);
 
-
+        // Top-N absolute holdings (largest participants).
         var top1 = holdingData.OrderByDescending(r => r.ShareholdingDecimal).Select(r => r.ShareholdingDecimal).Take(1).Sum();
         var top5 = holdingData.OrderByDescending(r => r.ShareholdingDecimal).Select(r => r.ShareholdingDecimal).Take(5).Sum();
         var top10 = holdingData.OrderByDescending(r => r.ShareholdingDecimal).Select(r => r.ShareholdingDecimal).Take(10).Sum();
+        // Top 10 plus NCIP shares (NCIP is not broken out per participant).
         var top10ncip = top10 + (summaryData.FirstOrDefault(r => r.Category == "Non-consenting Investor Participants")?.ShareholdingDecimal ?? 0);
         var stakeInCCASS = totalHolding > 0 ? (summaryData.Select(r => r.ShareholdingDecimal).Sum() / totalHolding) * 100 : 0;
 
+        // Upsert: update today's row if it already exists, otherwise append.
         var todayRecord = records.Where(r => r.Date == data.RecordDate.ToString("yyyyMMdd")).FirstOrDefault();
         if (todayRecord != null)
         {
-            // Update existing record
             todayRecord.Top1 = (top1 / totalIntermediary * 100).ToString("0.00");
             todayRecord.Top5 = (top5 / totalIntermediary * 100).ToString("0.00");
             todayRecord.Top10 = (top10 / totalIntermediary * 100).ToString("0.00");
@@ -147,7 +146,6 @@ public class DataProcessor(String outputPath, bool useSqlite = false)
         }
         else
         {
-            // Add new record
             var newRecord = new ConcentrationAnalysisItem()
             {
                 Date = data.RecordDate.ToString("yyyyMMdd"),
@@ -161,6 +159,7 @@ public class DataProcessor(String outputPath, bool useSqlite = false)
             todayRecord = newRecord;
         }
 
+        // Newest dates first for readability in the Markdown table.
         var orderedRecords = records.OrderByDescending(r => r.Date).ToList();
 
 
@@ -189,6 +188,7 @@ public class DataProcessor(String outputPath, bool useSqlite = false)
             writer.Close();
         }
 
+        // Optional SQLite mirror of the same snapshot + concentration row for this stock.
         if (useSqlite && todayRecord != null)
         {
             var summaryRows = summaryData
@@ -199,6 +199,9 @@ public class DataProcessor(String outputPath, bool useSqlite = false)
         }
     }
 
+    /// <summary>
+    /// Persist the full HKEX stock list as stockList.csv / stockList.md under the output root.
+    /// </summary>
     public async Task SaveStockListAsync(List<StockListItemDto> stockList, DateTime? recordDate = null)
     {
         var targetFolder = Path.Combine(outputPath);
@@ -207,7 +210,6 @@ public class DataProcessor(String outputPath, bool useSqlite = false)
             Directory.CreateDirectory(targetFolder);
         }
 
-        // Create StockList
         var stockListFileName = Path.Combine(targetFolder, $"stockList.csv");
         var stockListMDFileName = Path.Combine(targetFolder, $"stockList.md");
 
@@ -235,6 +237,7 @@ public class DataProcessor(String outputPath, bool useSqlite = false)
             writer.Close();
         }
 
+        // Optional SQLite stock-list database at the output root.
         if (useSqlite)
         {
             using var sqliteStore = SqliteDataStore.OpenStockListDatabase(targetFolder);
