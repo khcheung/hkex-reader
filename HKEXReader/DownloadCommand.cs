@@ -47,9 +47,13 @@ public class DownloadCommand : AsyncCommand<DownloadSettings>
         }
 
         Console.WriteLine($"File Output Path: {outputPath}");
+        if (settings.UseSqlite)
+        {
+            Console.WriteLine($"SQLite enabled: one database per stock folder ({SqliteDataStore.StockDatabaseFileName})");
+        }
 
         HKEXCCASSReader reader = new HKEXCCASSReader();
-        DataProcessor processor = new DataProcessor(outputPath);
+        DataProcessor processor = new DataProcessor(outputPath, settings.UseSqlite);
 
         List<String> stockCodeList = [];
 

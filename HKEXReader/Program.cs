@@ -14,7 +14,8 @@ public static class Program
             config.SetApplicationName("HKEXReader");
             config.AddCommand<DownloadCommand>("download")
                 .WithDescription("Download CCASS Data from HKEX")
-                .WithExample(new[] { "download", "00005", "-o", "C:\\Data", "-d", DateTime.Today.ToString("yyyy-MM-dd") });
+                .WithExample(new[] { "download", "00005", "-o", "C:\\Data", "-d", DateTime.Today.ToString("yyyy-MM-dd") })
+                .WithExample(new[] { "download", "00005", "-o", "C:\\Data", "-d", DateTime.Today.ToString("yyyy-MM-dd"), "-s" });
         });
 
         await app.RunAsync(args);
